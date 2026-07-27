@@ -1,0 +1,14 @@
+---
+description: BirthdayPartyPilot iOS architecture and verification requirements
+alwaysApply: true
+---
+
+- Keep SwiftUI views declarative and lightweight.
+- Put planning and execution logic in the agent layer.
+- Prefer explicit state transitions over loosely related Boolean flags.
+- Every new behavior must have a focused test.
+- Build after meaningful implementation changes.
+- Run the closest relevant tests.
+- Do not rewrite unrelated working code.
+- Report build errors instead of hiding them.
+- Ask before adding dependencies or changing architecture.
