@@ -171,7 +171,104 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         )
     }
 
+    func testRetryFailedFavorTaskOnlyAndContinuesToRSVPApproval() async {
+        let planner = RecordingBirthdayPlanner()
+        let tool = MockPartyTool()
+        let agent = makeAgent(planner: planner, tool: tool)
+        await agent.start()
+        let originalTaskIDs = agent.tasks.map(\.id)
+
+        await agent.executePlan()
+
+        let favorTask = agent.tasks[2]
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+        XCTAssertEqual(tool.executedTaskIDs, Array(originalTaskIDs.prefix(3)))
+        XCTAssertEqual(
+            favorTask.status,
+            .failed("Preparing the party-favor shopping list failed on its first attempt.")
+        )
+
+        await agent.retryFailedTask()
+
+        XCTAssertEqual(agent.tasks.map(\.id), originalTaskIDs)
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+        XCTAssertEqual(
+            tool.executedTaskIDs,
+            [originalTaskIDs[0], originalTaskIDs[1], originalTaskIDs[2], originalTaskIDs[2]]
+        )
+        XCTAssertEqual(
+            agent.tasks.map(\.status),
+            [.completed, .completed, .completed, .awaitingApproval, .pending]
+        )
+        XCTAssertEqual(agent.state, .awaitingApproval(originalTaskIDs[3]))
+        XCTAssertFalse(tool.executedTaskIDs.contains(originalTaskIDs[3]))
+        XCTAssertTrue(
+            agent.executionLog.contains(
+                "Failed \(favorTask.title): Preparing the party-favor shopping list failed on its first attempt."
+            )
+        )
+        XCTAssertTrue(
+            agent.executionLog.contains("Retrying \(favorTask.title) with \(tool.name).")
+        )
+        XCTAssertTrue(
+            agent.executionLog.contains(
+                "Retry succeeded for \(favorTask.title): Completed \(favorTask.title)"
+            )
+        )
+
+        let tasksAfterSuccessfulRetry = agent.tasks
+        let logAfterSuccessfulRetry = agent.executionLog
+        await agent.retryFailedTask()
+
+        XCTAssertEqual(agent.tasks, tasksAfterSuccessfulRetry)
+        XCTAssertEqual(agent.executionLog, logAfterSuccessfulRetry)
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+        XCTAssertEqual(
+            tool.executedTaskIDs,
+            [originalTaskIDs[0], originalTaskIDs[1], originalTaskIDs[2], originalTaskIDs[2]]
+        )
+    }
+
+    func testRetryOutsideFailedStateDoesNothing() async {
+        let planner = RecordingBirthdayPlanner()
+        let tool = MockPartyTool()
+        let agent = makeAgent(planner: planner, tool: tool)
+        await agent.start()
+        let originalTasks = agent.tasks
+
+        await agent.retryFailedTask()
+
+        XCTAssertEqual(agent.state, .reviewing)
+        XCTAssertEqual(agent.tasks, originalTasks)
+        XCTAssertTrue(agent.executionLog.isEmpty)
+        XCTAssertTrue(tool.executedTaskIDs.isEmpty)
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+    }
+
+    func testRetryFailedPlanningWithoutFailedTaskDoesNothing() async {
+        let planner = FailingBirthdayPlanner()
+        let tool = MockPartyTool()
+        let agent = makeAgent(planner: planner, tool: tool)
+        await agent.start()
+        let failureState = agent.state
+
+        await agent.retryFailedTask()
+
+        XCTAssertEqual(agent.state, failureState)
+        XCTAssertTrue(agent.tasks.isEmpty)
+        XCTAssertTrue(agent.executionLog.isEmpty)
+        XCTAssertTrue(tool.executedTaskIDs.isEmpty)
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+    }
+
     private func makeAgent(tool: any PartyTool) -> BirthdayAgent {
+        makeAgent(planner: DeterministicBirthdayPlanner(), tool: tool)
+    }
+
+    private func makeAgent(
+        planner: any BirthdayPlanning,
+        tool: any PartyTool
+    ) -> BirthdayAgent {
         BirthdayAgent(
             context: PartyContext(
                 childName: "Viyana",
@@ -182,9 +279,37 @@ final class BirthdayAgentExecutionTests: XCTestCase {
                 childCount: 12,
                 venue: "Test Venue"
             ),
-            planner: DeterministicBirthdayPlanner(),
+            planner: planner,
             tool: tool
         )
+    }
+}
+
+@MainActor
+private final class RecordingBirthdayPlanner: BirthdayPlanning {
+    private(set) var createPlanCallCount = 0
+
+    func createPlan(for context: PartyContext) async throws -> [PartyTask] {
+        createPlanCallCount += 1
+        return try await DeterministicBirthdayPlanner().createPlan(for: context)
+    }
+}
+
+@MainActor
+private final class FailingBirthdayPlanner: BirthdayPlanning {
+    private(set) var createPlanCallCount = 0
+
+    func createPlan(for context: PartyContext) async throws -> [PartyTask] {
+        createPlanCallCount += 1
+        throw PlanningFailure.failed
+    }
+}
+
+private enum PlanningFailure: LocalizedError {
+    case failed
+
+    var errorDescription: String? {
+        "Planning failed."
     }
 }
 

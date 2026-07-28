@@ -12,6 +12,7 @@ final class BirthdayAgent: ObservableObject {
     private let planner: any BirthdayPlanning
     private let tool: any PartyTool
     private var approvedTaskIDs: Set<UUID> = []
+    private var failedTaskID: UUID?
     private var nextTaskIndex = 0
 
     init(
@@ -47,6 +48,36 @@ final class BirthdayAgent: ObservableObject {
         }
 
         await executeRemainingTasks()
+    }
+
+    func retryFailedTask() async {
+        guard case .failed = state,
+              let failedTaskID,
+              nextTaskIndex < tasks.count,
+              tasks[nextTaskIndex].id == failedTaskID,
+              case .failed = tasks[nextTaskIndex].status
+        else {
+            return
+        }
+
+        let task = tasks[nextTaskIndex]
+        tasks[nextTaskIndex].status = .running
+        state = .executing(task.id)
+        executionLog.append("Retrying \(task.title) with \(tool.name).")
+
+        do {
+            let result = try await tool.execute(task: tasks[nextTaskIndex])
+            tasks[nextTaskIndex].status = .completed
+            executionLog.append("Retry succeeded for \(task.title): \(result)")
+            self.failedTaskID = nil
+            nextTaskIndex += 1
+            await executeRemainingTasks()
+        } catch {
+            let message = error.localizedDescription
+            tasks[nextTaskIndex].status = .failed(message)
+            executionLog.append("Retry failed for \(task.title): \(message)")
+            state = .failed(message)
+        }
     }
 
     func approve(taskID: UUID) async {
@@ -127,6 +158,7 @@ final class BirthdayAgent: ObservableObject {
         }
 
         approvedTaskIDs = []
+        failedTaskID = nil
         nextTaskIndex = 0
         tasks = []
         executionLog = []
@@ -157,6 +189,7 @@ final class BirthdayAgent: ObservableObject {
             } catch {
                 let message = error.localizedDescription
                 tasks[nextTaskIndex].status = .failed(message)
+                failedTaskID = task.id
                 executionLog.append("Failed \(task.title): \(message)")
                 state = .failed(message)
                 return
