@@ -25,7 +25,7 @@ final class BirthdayPartyPilotUITests: XCTestCase {
     @MainActor
     func testCreatesPlanAndShowsFiveTasks() throws {
         let app = XCUIApplication()
-        app.launch()
+        launchFresh(app)
 
         let childName = app.descendants(matching: .any)["party-child-name"]
         XCTAssertTrue(childName.waitForExistence(timeout: 5))
@@ -62,10 +62,91 @@ final class BirthdayPartyPilotUITests: XCTestCase {
     }
 
     @MainActor
+    func testStartsWithoutPreapprovalAndDeclinesApprovalTasks() throws {
+        let app = XCUIApplication()
+        launchFresh(app)
+
+        let createButton = app.buttons["create-plan-button"]
+        XCTAssertTrue(createButton.waitForExistence(timeout: 10))
+        createButton.tap()
+
+        let executeButton = app.buttons["execute-plan-button"]
+        scrollTo(element: executeButton, named: "start execution", in: app)
+        XCTAssertTrue(executeButton.isEnabled)
+        executeButton.tap()
+
+        let retryButton = app.buttons["retry-failed-task-button"]
+        scrollTo(element: retryButton, named: "retry failed task", in: app)
+        retryButton.tap()
+
+        scrollToTop(in: app)
+        let currentTask = app.staticTexts["current-task-title"]
+        XCTAssertTrue(currentTask.waitForExistence(timeout: 5))
+        expectation(
+            for: NSPredicate(format: "label CONTAINS %@", "Draft RSVP reminder"),
+            evaluatedWith: currentTask
+        )
+        waitForExpectations(timeout: 5)
+
+        let approveButton = app.buttons["approve-current-task-button"]
+        let declineButton = app.buttons["decline-current-task-button"]
+        scrollTo(element: declineButton, named: "decline RSVP", in: app)
+        XCTAssertTrue(approveButton.exists)
+        XCTAssertTrue(declineButton.exists)
+        declineButton.tap()
+
+        scrollToTop(in: app)
+        expectation(
+            for: NSPredicate(format: "label CONTAINS %@", "Prepare cake pickup reminder"),
+            evaluatedWith: currentTask
+        )
+        waitForExpectations(timeout: 5)
+
+        scrollTo(element: declineButton, named: "decline cake pickup", in: app)
+        declineButton.tap()
+
+        let completionMessage = app.descendants(matching: .any)["completion-message"]
+        XCTAssertTrue(completionMessage.waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
+    }
+
+    @MainActor
+    private func scrollTo(
+        element: XCUIElement,
+        named name: String,
+        in app: XCUIApplication,
+        maxSwipes: Int = 8
+    ) {
+        for _ in 0..<maxSwipes {
+            if element.exists, element.isHittable {
+                return
+            }
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(element.waitForExistence(timeout: 2), "Expected \(name) to exist")
+        XCTAssertTrue(element.isHittable, "Expected \(name) to be hittable")
+    }
+
+    @MainActor
+    private func scrollToTop(in app: XCUIApplication, maxSwipes: Int = 8) {
+        for _ in 0..<maxSwipes {
+            app.swipeDown()
+        }
+    }
+
+    @MainActor
+    private func launchFresh(_ app: XCUIApplication) {
+        if app.state != .notRunning {
+            app.terminate()
+        }
+        app.launch()
     }
 }

@@ -21,6 +21,7 @@ enum PartyTaskStatus: Equatable, Sendable {
     case running
     case completed
     case failed(String)
+    case declined
     case cancelled
 }
 

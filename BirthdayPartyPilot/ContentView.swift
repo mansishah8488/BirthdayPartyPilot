@@ -51,12 +51,50 @@ struct ContentView: View {
                     executionLog: agent.executionLog,
                     failureMessage: agent.failureMessage,
                     isComplete: agent.state == .completed,
+                    canRetry: agent.failureMessage != nil && agent.currentTask != nil,
+                    canApprove: canRespondToCurrentApproval,
+                    canDecline: canRespondToCurrentApproval,
                     canRestart: agent.canRestart,
+                    onRetry: {
+                        Task {
+                            await agent.retryFailedTask()
+                        }
+                    },
+                    onApprove: {
+                        guard let taskID = agent.currentTask?.id else {
+                            return
+                        }
+
+                        Task {
+                            await agent.approve(taskID: taskID)
+                        }
+                    },
+                    onDecline: {
+                        guard let taskID = agent.currentTask?.id else {
+                            return
+                        }
+
+                        Task {
+                            await agent.decline(taskID: taskID)
+                        }
+                    },
                     onRestart: {
                         agent.restart()
                     }
                 )
             }
         }
+    }
+
+    private var canRespondToCurrentApproval: Bool {
+        guard case let .awaitingApproval(taskID) = agent.state,
+              let currentTask = agent.currentTask
+        else {
+            return false
+        }
+
+        return currentTask.id == taskID
+            && currentTask.approvalRequirement == .required
+            && currentTask.status == .awaitingApproval
     }
 }

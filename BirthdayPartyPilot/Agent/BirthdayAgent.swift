@@ -102,6 +102,23 @@ final class BirthdayAgent: ObservableObject {
         await executeRemainingTasks()
     }
 
+    func decline(taskID: UUID) async {
+        guard case let .awaitingApproval(awaitingTaskID) = state,
+              awaitingTaskID == taskID,
+              nextTaskIndex < tasks.count,
+              tasks[nextTaskIndex].id == taskID,
+              tasks[nextTaskIndex].approvalRequirement == .required,
+              tasks[nextTaskIndex].status == .awaitingApproval
+        else {
+            return
+        }
+
+        tasks[nextTaskIndex].status = .declined
+        executionLog.append("Declined \(tasks[nextTaskIndex].title).")
+        nextTaskIndex += 1
+        await executeRemainingTasks()
+    }
+
     func isApproved(taskID: UUID) -> Bool {
         approvedTaskIDs.contains(taskID)
     }
@@ -111,9 +128,7 @@ final class BirthdayAgent: ObservableObject {
             return false
         }
 
-        return tasks
-            .filter { $0.approvalRequirement == .required }
-            .allSatisfy { approvedTaskIDs.contains($0.id) }
+        return !tasks.isEmpty
     }
 
     var currentTask: PartyTask? {

@@ -90,12 +90,12 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         )
     }
 
-    func testReviewApprovalsEnableExecution() async {
+    func testReviewApprovalsAreOptionalBeforeExecution() async {
         let tool = RecordingPartyTool()
         let agent = makeAgent(tool: tool)
         await agent.start()
 
-        XCTAssertFalse(agent.canExecutePlan)
+        XCTAssertTrue(agent.canExecutePlan)
         await agent.approve(taskID: agent.tasks[3].id)
         await agent.approve(taskID: agent.tasks[4].id)
 
@@ -261,8 +261,91 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertEqual(planner.createPlanCallCount, 1)
     }
 
+    func testDecliningApprovalTasksSkipsThemAndCompletesPlan() async {
+        let tool = MockPartyTool()
+        let agent = await makeAgentAtRSVPApproval(tool: tool)
+        let taskIDs = agent.tasks.map(\.id)
+        let rsvpTask = agent.tasks[3]
+        let cakePickupTask = agent.tasks[4]
+        let automaticExecutionIDs = [taskIDs[0], taskIDs[1], taskIDs[2], taskIDs[2]]
+
+        await agent.decline(taskID: rsvpTask.id)
+
+        XCTAssertEqual(agent.tasks[3].status, .declined)
+        XCTAssertFalse(agent.isApproved(taskID: rsvpTask.id))
+        XCTAssertEqual(agent.tasks[4].status, .awaitingApproval)
+        XCTAssertEqual(agent.state, .awaitingApproval(cakePickupTask.id))
+        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
+        XCTAssertTrue(agent.executionLog.contains("Declined \(rsvpTask.title)."))
+
+        await agent.approve(taskID: rsvpTask.id)
+
+        XCTAssertEqual(agent.tasks[3].status, .declined)
+        XCTAssertFalse(agent.isApproved(taskID: rsvpTask.id))
+        XCTAssertEqual(agent.state, .awaitingApproval(cakePickupTask.id))
+        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
+
+        await agent.decline(taskID: cakePickupTask.id)
+
+        XCTAssertEqual(agent.tasks[4].status, .declined)
+        XCTAssertFalse(agent.isApproved(taskID: cakePickupTask.id))
+        XCTAssertEqual(agent.state, .completed)
+        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
+        XCTAssertFalse(tool.executedTaskIDs.contains(rsvpTask.id))
+        XCTAssertFalse(tool.executedTaskIDs.contains(cakePickupTask.id))
+        XCTAssertTrue(agent.executionLog.contains("Declined \(cakePickupTask.title)."))
+        XCTAssertEqual(agent.executionLog.last, "Plan completed.")
+
+        await agent.approve(taskID: rsvpTask.id)
+        await agent.approve(taskID: cakePickupTask.id)
+
+        XCTAssertEqual(agent.state, .completed)
+        XCTAssertEqual(agent.tasks[3].status, .declined)
+        XCTAssertEqual(agent.tasks[4].status, .declined)
+        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
+    }
+
+    func testDecliningUnrelatedTaskDoesNothing() async {
+        let tool = MockPartyTool()
+        let agent = await makeAgentAtRSVPApproval(tool: tool)
+        let originalState = agent.state
+        let originalTasks = agent.tasks
+        let originalLog = agent.executionLog
+        let originalExecutionIDs = tool.executedTaskIDs
+
+        await agent.decline(taskID: UUID())
+
+        XCTAssertEqual(agent.state, originalState)
+        XCTAssertEqual(agent.tasks, originalTasks)
+        XCTAssertEqual(agent.executionLog, originalLog)
+        XCTAssertEqual(tool.executedTaskIDs, originalExecutionIDs)
+    }
+
+    func testDecliningOutsideAwaitingApprovalDoesNothing() async {
+        let tool = MockPartyTool()
+        let agent = makeAgent(tool: tool)
+        await agent.start()
+        let originalTasks = agent.tasks
+
+        await agent.decline(taskID: agent.tasks[3].id)
+
+        XCTAssertEqual(agent.state, .reviewing)
+        XCTAssertEqual(agent.tasks, originalTasks)
+        XCTAssertTrue(agent.executionLog.isEmpty)
+        XCTAssertTrue(tool.executedTaskIDs.isEmpty)
+        XCTAssertFalse(agent.isApproved(taskID: agent.tasks[3].id))
+    }
+
     private func makeAgent(tool: any PartyTool) -> BirthdayAgent {
         makeAgent(planner: DeterministicBirthdayPlanner(), tool: tool)
+    }
+
+    private func makeAgentAtRSVPApproval(tool: MockPartyTool) async -> BirthdayAgent {
+        let agent = makeAgent(tool: tool)
+        await agent.start()
+        await agent.executePlan()
+        await agent.retryFailedTask()
+        return agent
     }
 
     private func makeAgent(

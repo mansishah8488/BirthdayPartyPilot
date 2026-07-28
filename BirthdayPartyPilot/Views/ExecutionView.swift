@@ -6,14 +6,25 @@ struct ExecutionView: View {
     let executionLog: [String]
     let failureMessage: String?
     let isComplete: Bool
+    let canRetry: Bool
+    let canApprove: Bool
+    let canDecline: Bool
     let canRestart: Bool
+    let onRetry: () -> Void
+    let onApprove: () -> Void
+    let onDecline: () -> Void
     let onRestart: () -> Void
 
     var body: some View {
         List {
             Section("Current task") {
                 if let currentTask {
-                    Label(currentTask.title, systemImage: "hourglass")
+                    Label {
+                        Text(currentTask.title)
+                            .accessibilityIdentifier("current-task-title")
+                    } icon: {
+                        Image(systemName: "hourglass")
+                    }
                 } else {
                     Text(isComplete ? "No tasks remaining" : "No task running")
                         .foregroundStyle(.secondary)
@@ -59,6 +70,26 @@ struct ExecutionView: View {
             }
 
             Section {
+                if canRetry {
+                    Button("Retry Failed Task", action: onRetry)
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityLabel("Retry failed task")
+                        .accessibilityIdentifier("retry-failed-task-button")
+                }
+
+                if canApprove {
+                    Button("Approve Current Task", action: onApprove)
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityLabel("Approve current task")
+                        .accessibilityIdentifier("approve-current-task-button")
+                }
+
+                if canDecline {
+                    Button("Decline Current Task", role: .destructive, action: onDecline)
+                        .accessibilityLabel("Decline current task")
+                        .accessibilityIdentifier("decline-current-task-button")
+                }
+
                 Button("Restart Demo", action: onRestart)
                     .disabled(!canRestart)
                     .accessibilityLabel("Restart birthday party demo")

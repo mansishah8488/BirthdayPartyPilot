@@ -38,17 +38,15 @@ struct PlanReviewView: View {
             }
 
             Section {
-                Button("Execute Approved Plan", action: onExecutePlan)
+                Button("Start Plan Execution", action: onExecutePlan)
                     .buttonStyle(.borderedProminent)
                     .disabled(!canExecutePlan)
-                    .accessibilityLabel("Execute Approved Plan")
+                    .accessibilityLabel("Start Plan Execution")
                     .accessibilityIdentifier("execute-plan-button")
 
-                if !canExecutePlan {
-                    Text("Approve every required task before execution.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Approval-required tasks pause for a decision during execution.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .accessibilityIdentifier("plan-review-screen")
@@ -82,6 +80,7 @@ struct PlanReviewView: View {
         case .running: "Running"
         case .completed: "Completed"
         case let .failed(message): "Failed: \(message)"
+        case .declined: "Declined"
         case .cancelled: "Cancelled"
         }
     }
@@ -93,6 +92,7 @@ struct PlanReviewView: View {
         case .running: "hourglass"
         case .completed: "checkmark.circle.fill"
         case .failed: "exclamationmark.triangle.fill"
+        case .declined: "hand.thumbsdown.fill"
         case .cancelled: "xmark.circle.fill"
         }
     }
