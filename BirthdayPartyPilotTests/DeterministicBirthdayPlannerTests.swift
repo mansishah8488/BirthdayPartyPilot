@@ -11,7 +11,8 @@ final class DeterministicBirthdayPlannerTests: XCTestCase {
             partyDate: Date(timeIntervalSince1970: 0),
             theme: "Rainbows",
             adultCount: 8,
-            childCount: 12
+            childCount: 12,
+            venue: "Test Venue"
         )
 
         let tasks = try await DeterministicBirthdayPlanner().createPlan(for: context)

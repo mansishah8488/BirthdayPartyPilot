@@ -7,4 +7,5 @@ struct PartyContext: Equatable, Sendable {
     let theme: String
     let adultCount: Int
     let childCount: Int
+    let venue: String
 }

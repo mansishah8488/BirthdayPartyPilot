@@ -90,6 +90,37 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         )
     }
 
+    func testReviewApprovalsEnableExecution() async {
+        let tool = RecordingPartyTool()
+        let agent = makeAgent(tool: tool)
+        await agent.start()
+
+        XCTAssertFalse(agent.canExecutePlan)
+        await agent.approve(taskID: agent.tasks[3].id)
+        await agent.approve(taskID: agent.tasks[4].id)
+
+        XCTAssertTrue(agent.isApproved(taskID: agent.tasks[3].id))
+        XCTAssertTrue(agent.isApproved(taskID: agent.tasks[4].id))
+        XCTAssertTrue(agent.canExecutePlan)
+
+        await agent.executePlan()
+
+        XCTAssertEqual(tool.executedTaskIDs, agent.tasks.map(\.id))
+        XCTAssertEqual(agent.state, .completed)
+    }
+
+    func testRestartClearsDemoState() async {
+        let agent = makeAgent(tool: RecordingPartyTool())
+        await agent.start()
+        await agent.approve(taskID: agent.tasks[3].id)
+
+        agent.restart()
+
+        XCTAssertEqual(agent.state, .idle)
+        XCTAssertTrue(agent.tasks.isEmpty)
+        XCTAssertTrue(agent.executionLog.isEmpty)
+    }
+
     private func makeAgent(tool: RecordingPartyTool) -> BirthdayAgent {
         BirthdayAgent(
             context: PartyContext(
@@ -98,7 +129,8 @@ final class BirthdayAgentExecutionTests: XCTestCase {
                 partyDate: Date(timeIntervalSince1970: 0),
                 theme: "Rainbows",
                 adultCount: 8,
-                childCount: 12
+                childCount: 12,
+                venue: "Test Venue"
             ),
             planner: DeterministicBirthdayPlanner(),
             tool: tool

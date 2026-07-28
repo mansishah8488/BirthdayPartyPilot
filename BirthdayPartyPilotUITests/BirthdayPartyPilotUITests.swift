@@ -23,14 +23,42 @@ final class BirthdayPartyPilotUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testCreatesPlanAndShowsFiveTasks() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        let childName = app.descendants(matching: .any)["party-child-name"]
+        XCTAssertTrue(childName.waitForExistence(timeout: 5))
+        let childValue = childName.value as? String
+        XCTAssertTrue(
+            childName.label.contains("Viyana") || childValue?.contains("Viyana") == true
+        )
+
+        let createButton = app.buttons["create-plan-button"]
+        XCTAssertTrue(createButton.waitForExistence(timeout: 5))
+        createButton.tap()
+
+        let reviewScreen = app.descendants(matching: .any)["plan-review-screen"]
+        XCTAssertTrue(reviewScreen.waitForExistence(timeout: 5))
+
+        let taskTitles = [
+            "Calculate cake servings",
+            "Create food quantity checklist",
+            "Prepare party-favor shopping list",
+            "Draft RSVP reminder",
+            "Prepare cake pickup reminder",
+        ]
+
+        for title in taskTitles {
+            let taskTitle = app.staticTexts[title]
+            if !taskTitle.exists {
+                app.swipeUp()
+            }
+            XCTAssertTrue(
+                taskTitle.waitForExistence(timeout: 2),
+                "Expected task title: \(title)"
+            )
+        }
     }
 
     @MainActor

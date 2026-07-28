@@ -50,6 +50,15 @@ final class BirthdayAgent: ObservableObject {
     }
 
     func approve(taskID: UUID) async {
+        if state == .reviewing,
+           let task = tasks.first(where: { $0.id == taskID }),
+           task.approvalRequirement == .required,
+           !approvedTaskIDs.contains(taskID) {
+            approvedTaskIDs.insert(taskID)
+            executionLog.append("Approved \(task.title).")
+            return
+        }
+
         guard state == .awaitingApproval(taskID),
               nextTaskIndex < tasks.count,
               tasks[nextTaskIndex].id == taskID
@@ -60,6 +69,68 @@ final class BirthdayAgent: ObservableObject {
         approvedTaskIDs.insert(taskID)
         executionLog.append("Approved \(tasks[nextTaskIndex].title).")
         await executeRemainingTasks()
+    }
+
+    func isApproved(taskID: UUID) -> Bool {
+        approvedTaskIDs.contains(taskID)
+    }
+
+    var canExecutePlan: Bool {
+        guard state == .reviewing else {
+            return false
+        }
+
+        return tasks
+            .filter { $0.approvalRequirement == .required }
+            .allSatisfy { approvedTaskIDs.contains($0.id) }
+    }
+
+    var currentTask: PartyTask? {
+        switch state {
+        case let .awaitingApproval(taskID), let .executing(taskID):
+            tasks.first { $0.id == taskID }
+        case .failed:
+            tasks.first {
+                if case .failed = $0.status {
+                    return true
+                }
+                return false
+            }
+        default:
+            nil
+        }
+    }
+
+    var completedTasks: [PartyTask] {
+        tasks.filter { $0.status == .completed }
+    }
+
+    var failureMessage: String? {
+        guard case let .failed(message) = state else {
+            return nil
+        }
+        return message
+    }
+
+    var canRestart: Bool {
+        switch state {
+        case .planning, .executing:
+            false
+        case .idle, .reviewing, .awaitingApproval, .completed, .failed:
+            true
+        }
+    }
+
+    func restart() {
+        guard canRestart else {
+            return
+        }
+
+        approvedTaskIDs = []
+        nextTaskIndex = 0
+        tasks = []
+        executionLog = []
+        state = .idle
     }
 
     private func executeRemainingTasks() async {
