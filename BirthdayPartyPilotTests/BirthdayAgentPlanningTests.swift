@@ -13,7 +13,11 @@ final class BirthdayAgentPlanningTests: XCTestCase {
             ),
         ]
         let planner = StubBirthdayPlanner(result: .success(expectedTasks))
-        let agent = BirthdayAgent(context: testContext, planner: planner)
+        let agent = BirthdayAgent(
+            context: testContext,
+            planner: planner,
+            tool: MockPartyTool()
+        )
         var stateObservedByPlanner: BirthdayAgentState?
         planner.onCreatePlan = {
             stateObservedByPlanner = agent.state
@@ -33,7 +37,11 @@ final class BirthdayAgentPlanningTests: XCTestCase {
         let planner = StubBirthdayPlanner(
             result: .failure(PlanningTestError.unavailable)
         )
-        let agent = BirthdayAgent(context: testContext, planner: planner)
+        let agent = BirthdayAgent(
+            context: testContext,
+            planner: planner,
+            tool: MockPartyTool()
+        )
         var stateObservedByPlanner: BirthdayAgentState?
         planner.onCreatePlan = {
             stateObservedByPlanner = agent.state
