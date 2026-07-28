@@ -121,7 +121,57 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertTrue(agent.executionLog.isEmpty)
     }
 
-    private func makeAgent(tool: RecordingPartyTool) -> BirthdayAgent {
+    func testMockPartyToolFailsFavorTaskOnlyOnFirstAttemptForSameID() async throws {
+        let tool = MockPartyTool()
+        let favorTask = PartyTask(
+            title: "Prepare party-favor shopping list",
+            category: .favors,
+            approvalRequirement: .none
+        )
+
+        do {
+            _ = try await tool.execute(task: favorTask)
+            XCTFail("Expected the first favor attempt to fail")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Preparing the party-favor shopping list failed on its first attempt."
+            )
+        }
+
+        let result = try await tool.execute(task: favorTask)
+
+        XCTAssertEqual(result, "Completed Prepare party-favor shopping list")
+        XCTAssertEqual(tool.executedTaskIDs, [favorTask.id, favorTask.id])
+    }
+
+    func testFavorFailureStopsSequentialAgentExecution() async {
+        let tool = MockPartyTool()
+        let agent = makeAgent(tool: tool)
+        await agent.start()
+
+        await agent.executePlan()
+
+        XCTAssertEqual(tool.executedTaskIDs, Array(agent.tasks.prefix(3).map(\.id)))
+        XCTAssertEqual(
+            agent.tasks.prefix(3).map(\.category),
+            [.cake, .food, .favors]
+        )
+        XCTAssertEqual(agent.tasks[0].status, .completed)
+        XCTAssertEqual(agent.tasks[1].status, .completed)
+        XCTAssertEqual(
+            agent.tasks[2].status,
+            .failed("Preparing the party-favor shopping list failed on its first attempt.")
+        )
+        XCTAssertEqual(agent.tasks[3].status, .pending)
+        XCTAssertEqual(agent.tasks[4].status, .pending)
+        XCTAssertEqual(
+            agent.state,
+            .failed("Preparing the party-favor shopping list failed on its first attempt.")
+        )
+    }
+
+    private func makeAgent(tool: any PartyTool) -> BirthdayAgent {
         BirthdayAgent(
             context: PartyContext(
                 childName: "Viyana",
