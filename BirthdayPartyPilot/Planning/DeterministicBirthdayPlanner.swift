@@ -17,6 +17,11 @@ struct DeterministicBirthdayPlanner: BirthdayPlanning {
                 approvalRequirement: .none
             ),
             PartyTask(
+                title: "Confirm venue reservation details",
+                category: .venue,
+                approvalRequirement: .required
+            ),
+            PartyTask(
                 title: "Draft RSVP reminder",
                 category: .guests,
                 approvalRequirement: .required
