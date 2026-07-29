@@ -45,6 +45,7 @@ struct PartySummaryHeader: View {
                     .lineLimit(nil)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(PartyTheme.standardSpacing)
         .background(PartyTheme.approvalBackground)
         .clipShape(RoundedRectangle(cornerRadius: PartyTheme.cardCornerRadius))
@@ -64,15 +65,20 @@ struct PartySummaryHeader: View {
     }
 
     private var summaryText: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: PartyTheme.compactSpacing) {
             Text("\(context.childName)'s Birthday")
-                .font(.title2.bold())
+                .font(.title.bold())
+                .foregroundStyle(.primary)
                 .lineLimit(nil)
 
-            Text("Turning \(context.age) · \(context.theme)")
+            Text(context.theme)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(PartyTheme.accent)
+                .lineLimit(nil)
+
+            Text("Turning \(context.age)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(nil)
         }
     }
 
@@ -80,7 +86,7 @@ struct PartySummaryHeader: View {
         Label {
             Text(
                 context.partyDate,
-                format: .dateTime.month(.abbreviated).day()
+                format: .dateTime.month(.abbreviated).day().year()
             )
         } icon: {
             Image(systemName: "calendar")

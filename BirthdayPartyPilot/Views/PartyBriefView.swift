@@ -11,11 +11,11 @@ struct PartyBriefView: View {
                 PartySummaryHeader(
                     context: context,
                     phase: "Party brief",
-                    detail: "\(context.adultCount + context.childCount) guests at \(context.venue)"
+                    detail: nil
                 )
                 .listRowInsets(
                     EdgeInsets(
-                        top: PartyTheme.compactSpacing,
+                        top: PartyTheme.standardSpacing,
                         leading: PartyTheme.standardSpacing,
                         bottom: PartyTheme.compactSpacing,
                         trailing: PartyTheme.standardSpacing
@@ -25,35 +25,64 @@ struct PartyBriefView: View {
             }
 
             Section {
-                LabeledContent("Birthday child", value: context.childName)
-                    .accessibilityIdentifier("party-child-name")
-                LabeledContent("Age", value: "Turning \(context.age)")
-                LabeledContent {
-                    Text(
-                        context.partyDate,
-                        format: .dateTime.month(.wide).day().year()
+                VStack(alignment: .leading, spacing: PartyTheme.standardSpacing) {
+                    briefFact(
+                        title: "Birthday child",
+                        value: context.childName,
+                        systemImage: "gift"
                     )
-                } label: {
-                    Text("Date")
+                    .accessibilityIdentifier("party-child-name")
+
+                    briefFact(
+                        title: "Date",
+                        value: context.partyDate.formatted(
+                            .dateTime.month(.wide).day().year()
+                        ),
+                        systemImage: "calendar"
+                    )
+
+                    briefFact(
+                        title: "Venue",
+                        value: context.venue,
+                        systemImage: "mappin.and.ellipse"
+                    )
+
+                    briefFact(
+                        title: "Guests",
+                        value: guestSummary,
+                        systemImage: "person.2"
+                    )
                 }
-                LabeledContent("Theme", value: context.theme)
-                LabeledContent("Adults", value: "\(context.adultCount) adults")
-                LabeledContent("Children", value: "\(context.childCount) children")
-                LabeledContent("Venue", value: context.venue)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(PartyTheme.standardSpacing)
+                .background(PartyTheme.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: PartyTheme.cardCornerRadius))
+                .listRowInsets(
+                    EdgeInsets(
+                        top: PartyTheme.compactSpacing,
+                        leading: PartyTheme.standardSpacing,
+                        bottom: PartyTheme.compactSpacing,
+                        trailing: PartyTheme.standardSpacing
+                    )
+                )
+                .listRowBackground(Color.clear)
             } header: {
                 PartySectionHeader(
                     title: "Party details",
-                    subtitle: "The fixed brief used to create the plan."
+                    subtitle: "Date, venue, and guest counts for this plan."
                 )
             }
 
             Section {
                 Button(action: onCreatePlan) {
-                    Label(
-                        isPlanning ? "Creating Birthday Plan" : "Create Birthday Plan",
-                        systemImage: isPlanning ? "sparkles" : "wand.and.stars"
+                    Text(
+                        isPlanning
+                            ? "Creating Birthday Plan"
+                            : "Create Birthday Plan"
                     )
-                        .frame(maxWidth: .infinity)
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, PartyTheme.compactSpacing)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -65,6 +94,7 @@ struct PartyBriefView: View {
                 if isPlanning {
                     ProgressView("Creating birthday plan")
                         .frame(maxWidth: .infinity)
+                        .padding(.top, PartyTheme.compactSpacing)
                         .accessibilityIdentifier("planning-progress")
                 }
             }
@@ -74,5 +104,34 @@ struct PartyBriefView: View {
         .scrollContentBackground(.hidden)
         .background(PartyTheme.pageBackground)
         .accessibilityIdentifier("party-brief-screen")
+    }
+
+    private var guestSummary: String {
+        "\(context.adultCount) adults · \(context.childCount) children"
+    }
+
+    private func briefFact(
+        title: String,
+        value: String,
+        systemImage: String
+    ) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(value)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(nil)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(PartyTheme.accent)
+                .accessibilityHidden(true)
+        }
+        .labelStyle(.titleAndIcon)
+        .accessibilityElement(children: .combine)
     }
 }
