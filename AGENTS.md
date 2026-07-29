@@ -27,6 +27,35 @@ The demo plans Viyana's seventh birthday party and shows how an agent:
 - Do not add external packages.
 - Do not add networking or persistence.
 
+## SwiftUI architecture
+
+BirthdayAgent is the feature-level ViewModel and agent orchestrator for the
+current BirthdayPartyPilot vertical slice.
+
+It is the single observable source of truth for:
+
+- agent state,
+- planned tasks,
+- approvals,
+- execution progress,
+- failures,
+- retries,
+- declines,
+- restart behavior,
+- execution logs.
+
+SwiftUI views render this state and send user intent back to BirthdayAgent.
+
+Do not create a separate ViewModel for every screen unless that screen owns
+meaningful independent state or behavior. Thin ViewModels that only forward
+BirthdayAgent properties or methods are not permitted.
+
+Views must not directly mutate task status, approval state, execution state or
+logs.
+
+Presentation-only mappings and reusable SwiftUI components may be extracted
+when they improve consistency without creating a second source of truth.
+
 ## Workflow
 
 Before changing code:
