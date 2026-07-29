@@ -18,7 +18,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertEqual(tool.executedTaskIDs, Array(agent.tasks.prefix(3).map(\.id)))
         XCTAssertEqual(
             agent.tasks.map(\.status),
-            [.completed, .completed, .completed, .awaitingApproval, .pending]
+            [.completed, .completed, .completed, .awaitingApproval, .pending, .pending]
         )
         XCTAssertEqual(agent.state, .awaitingApproval(agent.tasks[3].id))
         XCTAssertTrue(
@@ -39,6 +39,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertEqual(tool.executedTaskIDs, Array(agent.tasks.prefix(3).map(\.id)))
         XCTAssertEqual(agent.tasks[3].status, .awaitingApproval)
         XCTAssertEqual(agent.tasks[4].status, .pending)
+        XCTAssertEqual(agent.tasks[5].status, .pending)
     }
 
     func testApprovingCurrentTaskResumesAndPausesAtNextApproval() async {
@@ -63,12 +64,14 @@ final class BirthdayAgentExecutionTests: XCTestCase {
 
         await agent.approve(taskID: agent.tasks[3].id)
         await agent.approve(taskID: agent.tasks[4].id)
+        await agent.approve(taskID: agent.tasks[5].id)
 
         XCTAssertEqual(tool.executedTaskIDs, agent.tasks.map(\.id))
         XCTAssertTrue(agent.tasks.allSatisfy { $0.status == .completed })
         XCTAssertEqual(agent.state, .completed)
         XCTAssertTrue(agent.executionLog.contains("Approved \(agent.tasks[3].title)."))
         XCTAssertTrue(agent.executionLog.contains("Approved \(agent.tasks[4].title)."))
+        XCTAssertTrue(agent.executionLog.contains("Approved \(agent.tasks[5].title)."))
         XCTAssertEqual(agent.executionLog.last, "Plan completed.")
     }
 
@@ -98,9 +101,11 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertTrue(agent.canExecutePlan)
         await agent.approve(taskID: agent.tasks[3].id)
         await agent.approve(taskID: agent.tasks[4].id)
+        await agent.approve(taskID: agent.tasks[5].id)
 
         XCTAssertTrue(agent.isApproved(taskID: agent.tasks[3].id))
         XCTAssertTrue(agent.isApproved(taskID: agent.tasks[4].id))
+        XCTAssertTrue(agent.isApproved(taskID: agent.tasks[5].id))
         XCTAssertTrue(agent.canExecutePlan)
 
         await agent.executePlan()
@@ -118,6 +123,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         let originalTaskIDs = agent.tasks.map(\.id)
         await agent.approve(taskID: agent.tasks[3].id)
         await agent.approve(taskID: agent.tasks[4].id)
+        await agent.approve(taskID: agent.tasks[5].id)
         await agent.executePlan()
 
         XCTAssertEqual(planner.createPlanCallCount, 1)
@@ -142,7 +148,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
 
         let newTaskIDs = agent.tasks.map(\.id)
         XCTAssertEqual(planner.createPlanCallCount, 2)
-        XCTAssertEqual(newTaskIDs.count, 5)
+        XCTAssertEqual(newTaskIDs.count, 6)
         XCTAssertTrue(Set(originalTaskIDs).isDisjoint(with: Set(newTaskIDs)))
         XCTAssertEqual(agent.state, .reviewing)
 
@@ -166,6 +172,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         let originalTaskIDs = agent.tasks.map(\.id)
         await agent.approve(taskID: agent.tasks[3].id)
         await agent.approve(taskID: agent.tasks[4].id)
+        await agent.approve(taskID: agent.tasks[5].id)
         await agent.executePlan()
 
         XCTAssertEqual(agent.state, .completed)
@@ -317,13 +324,14 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         )
         XCTAssertEqual(agent.tasks[3].status, .pending)
         XCTAssertEqual(agent.tasks[4].status, .pending)
+        XCTAssertEqual(agent.tasks[5].status, .pending)
         XCTAssertEqual(
             agent.state,
             .failed("Preparing the party-favor shopping list failed on its first attempt.")
         )
     }
 
-    func testRetryFailedFavorTaskOnlyAndContinuesToRSVPApproval() async {
+    func testRetryFailedFavorTaskOnlyAndContinuesToVenueApproval() async {
         let planner = RecordingBirthdayPlanner()
         let tool = MockPartyTool()
         let agent = makeAgent(planner: planner, tool: tool)
@@ -350,7 +358,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         )
         XCTAssertEqual(
             agent.tasks.map(\.status),
-            [.completed, .completed, .completed, .awaitingApproval, .pending]
+            [.completed, .completed, .completed, .awaitingApproval, .pending, .pending]
         )
         XCTAssertEqual(agent.state, .awaitingApproval(originalTaskIDs[3]))
         XCTAssertFalse(tool.executedTaskIDs.contains(originalTaskIDs[3]))
@@ -415,51 +423,64 @@ final class BirthdayAgentExecutionTests: XCTestCase {
 
     func testDecliningApprovalTasksSkipsThemAndCompletesPlan() async {
         let tool = MockPartyTool()
-        let agent = await makeAgentAtRSVPApproval(tool: tool)
+        let agent = await makeAgentAtFirstApproval(tool: tool)
         let taskIDs = agent.tasks.map(\.id)
-        let rsvpTask = agent.tasks[3]
-        let cakePickupTask = agent.tasks[4]
+        let venueTask = agent.tasks[3]
+        let rsvpTask = agent.tasks[4]
+        let cakePickupTask = agent.tasks[5]
         let automaticExecutionIDs = [taskIDs[0], taskIDs[1], taskIDs[2], taskIDs[2]]
+
+        await agent.decline(taskID: venueTask.id)
+
+        XCTAssertEqual(agent.tasks[3].status, .declined)
+        XCTAssertFalse(agent.isApproved(taskID: venueTask.id))
+        XCTAssertEqual(agent.tasks[4].status, .awaitingApproval)
+        XCTAssertEqual(agent.state, .awaitingApproval(rsvpTask.id))
+        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
+        XCTAssertTrue(agent.executionLog.contains("Declined \(venueTask.title)."))
+
+        await agent.approve(taskID: venueTask.id)
+
+        XCTAssertEqual(agent.tasks[3].status, .declined)
+        XCTAssertFalse(agent.isApproved(taskID: venueTask.id))
+        XCTAssertEqual(agent.state, .awaitingApproval(rsvpTask.id))
+        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
 
         await agent.decline(taskID: rsvpTask.id)
 
-        XCTAssertEqual(agent.tasks[3].status, .declined)
+        XCTAssertEqual(agent.tasks[4].status, .declined)
         XCTAssertFalse(agent.isApproved(taskID: rsvpTask.id))
-        XCTAssertEqual(agent.tasks[4].status, .awaitingApproval)
+        XCTAssertEqual(agent.tasks[5].status, .awaitingApproval)
         XCTAssertEqual(agent.state, .awaitingApproval(cakePickupTask.id))
         XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
+        XCTAssertFalse(tool.executedTaskIDs.contains(venueTask.id))
+        XCTAssertFalse(tool.executedTaskIDs.contains(rsvpTask.id))
         XCTAssertTrue(agent.executionLog.contains("Declined \(rsvpTask.title)."))
-
-        await agent.approve(taskID: rsvpTask.id)
-
-        XCTAssertEqual(agent.tasks[3].status, .declined)
-        XCTAssertFalse(agent.isApproved(taskID: rsvpTask.id))
-        XCTAssertEqual(agent.state, .awaitingApproval(cakePickupTask.id))
-        XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
 
         await agent.decline(taskID: cakePickupTask.id)
 
-        XCTAssertEqual(agent.tasks[4].status, .declined)
+        XCTAssertEqual(agent.tasks[5].status, .declined)
         XCTAssertFalse(agent.isApproved(taskID: cakePickupTask.id))
         XCTAssertEqual(agent.state, .completed)
         XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
-        XCTAssertFalse(tool.executedTaskIDs.contains(rsvpTask.id))
         XCTAssertFalse(tool.executedTaskIDs.contains(cakePickupTask.id))
         XCTAssertTrue(agent.executionLog.contains("Declined \(cakePickupTask.title)."))
         XCTAssertEqual(agent.executionLog.last, "Plan completed.")
 
+        await agent.approve(taskID: venueTask.id)
         await agent.approve(taskID: rsvpTask.id)
         await agent.approve(taskID: cakePickupTask.id)
 
         XCTAssertEqual(agent.state, .completed)
         XCTAssertEqual(agent.tasks[3].status, .declined)
         XCTAssertEqual(agent.tasks[4].status, .declined)
+        XCTAssertEqual(agent.tasks[5].status, .declined)
         XCTAssertEqual(tool.executedTaskIDs, automaticExecutionIDs)
     }
 
     func testDecliningUnrelatedTaskDoesNothing() async {
         let tool = MockPartyTool()
-        let agent = await makeAgentAtRSVPApproval(tool: tool)
+        let agent = await makeAgentAtFirstApproval(tool: tool)
         let originalState = agent.state
         let originalTasks = agent.tasks
         let originalLog = agent.executionLog
@@ -492,7 +513,7 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         makeAgent(planner: DeterministicBirthdayPlanner(), tool: tool)
     }
 
-    private func makeAgentAtRSVPApproval(tool: MockPartyTool) async -> BirthdayAgent {
+    private func makeAgentAtFirstApproval(tool: MockPartyTool) async -> BirthdayAgent {
         let agent = makeAgent(tool: tool)
         await agent.start()
         await agent.executePlan()
