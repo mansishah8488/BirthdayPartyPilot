@@ -62,7 +62,7 @@ final class BirthdayPartyPilotUITests: XCTestCase {
     }
 
     @MainActor
-    func testStartsWithoutPreapprovalAndDeclinesApprovalTasks() throws {
+    func testRetryDeclineAndRestartAreWiredToExecutionScreen() throws {
         let app = XCUIApplication()
         launchFresh(app)
 
@@ -107,6 +107,14 @@ final class BirthdayPartyPilotUITests: XCTestCase {
 
         let completionMessage = app.descendants(matching: .any)["completion-message"]
         XCTAssertTrue(completionMessage.waitForExistence(timeout: 5))
+
+        let restartButton = app.buttons["restart-demo-button"]
+        scrollTo(element: restartButton, named: "restart completed demo", in: app)
+        XCTAssertTrue(restartButton.isEnabled)
+        restartButton.tap()
+
+        XCTAssertTrue(createButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["party-child-name"].exists)
     }
 
     @MainActor
