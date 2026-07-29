@@ -16,31 +16,37 @@ Every task declares whether it is informational or requires approval.
 The agent cannot execute side-effecting tasks until the user explicitly
 approves them.
 
-## Feature-level ViewModel
+## BirthdayAgent as the Feature ViewModel
 
 BirthdayAgent currently serves as both the agent orchestrator and the
 feature-level ViewModel.
 
-This is intentional for the focused BirthdayPartyPilot vertical slice. The
-three primary screens display different projections of the same task workflow,
-rather than owning independent data or asynchronous operations.
+This is intentional because PartyBriefView, PlanReviewView and ExecutionView
+are different presentations of one shared workflow rather than independent
+features with separate data lifecycles.
 
-Creating PartyBriefViewModel, PlanReviewViewModel and ExecutionViewModel would
-introduce forwarding layers and risk duplicate state without establishing a
-meaningful responsibility boundary.
-
-The current flow is:
+The state flow is:
 
 SwiftUI user intent
 → BirthdayAgent
-→ planner and tool dependencies
-→ observable agent state
+→ BirthdayPlanning and PartyTool
+→ published agent state, tasks and logs
 → SwiftUI rendering
 
-A separate BirthdayPartyViewModel should be introduced when:
+Separate screen ViewModels would currently add forwarding layers and risk
+duplicated state without creating a meaningful responsibility boundary.
 
-- presentation transformation becomes substantial,
-- the UI combines multiple domain services,
-- screens gain independent asynchronous workflows,
-- navigation coordination becomes complex,
-- or BirthdayAgent should become UI-framework independent.
+A separate presentation ViewModel may be introduced when presentation
+transformation, navigation coordination or independent asynchronous work
+becomes substantial.
+
+## Lightweight native SwiftUI design system
+
+BirthdayPartyPilot uses a small internal design system instead of a third-party
+UI framework.
+
+This keeps the app visually consistent while preserving native SwiftUI
+behavior, accessibility, Dynamic Type and dark-mode support.
+
+The design system is intentionally limited to shared tokens and repeated
+presentation components. It does not own workflow state or business logic.
