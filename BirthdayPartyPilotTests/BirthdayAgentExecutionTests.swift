@@ -114,6 +114,34 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertEqual(agent.state, .completed)
     }
 
+    func testPlanReviewProgressStatsPendingApprovalReachesZeroAfterPreApprovingAll() async {
+        let agent = makeAgent(tool: RecordingPartyTool())
+        await agent.start()
+
+        var stats = PlanReviewProgressStats(
+            tasks: agent.tasks,
+            isApproved: agent.isApproved(taskID:)
+        )
+        XCTAssertEqual(stats.pendingApprovalCount, 3)
+        XCTAssertEqual(stats.approvedCount, 0)
+
+        for task in agent.tasks where task.approvalRequirement == .required {
+            await agent.approve(taskID: task.id)
+            stats = PlanReviewProgressStats(
+                tasks: agent.tasks,
+                isApproved: agent.isApproved(taskID:)
+            )
+            XCTAssertEqual(
+                stats.pendingApprovalCount,
+                stats.approvalRequiredCount - stats.approvedCount
+            )
+        }
+
+        XCTAssertEqual(stats.pendingApprovalCount, 0)
+        XCTAssertEqual(stats.approvedCount, 3)
+        XCTAssertTrue(stats.allSideEffectsPreApproved)
+    }
+
     func testRestartAfterFailureClearsRunStateAndFreshPlanFailsFavorAgain() async {
         let planner = RecordingBirthdayPlanner()
         let tool = MockPartyTool()

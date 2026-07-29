@@ -6,40 +6,30 @@ struct PartyTaskCard: View {
     var isHighlighted = false
     var onApprove: (() -> Void)?
     var titleAccessibilityIdentifier: String?
+    var positionLabel: String?
+    /// Plan Review uses compact top-right symbols; Execution keeps labeled badges.
+    var statusBadgeStyle: TaskStatusBadge.Style = .labeled
+    var showsApprovalText = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PartyTheme.standardSpacing) {
-            VStack(alignment: .leading, spacing: PartyTheme.compactSpacing) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: PartyTheme.compactSpacing) {
-                        taskTitle
-                            .fixedSize(horizontal: true, vertical: false)
-
-                        Spacer(minLength: PartyTheme.compactSpacing)
-
-                        TaskStatusBadge(status: task.status)
-                    }
-
-                    VStack(alignment: .leading, spacing: PartyTheme.compactSpacing) {
-                        taskTitle
-                        TaskStatusBadge(status: task.status)
-                    }
-                }
-
-                Label(categoryName, systemImage: categoryIcon)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                approvalLabel
-
-                if case let .failed(message) = task.status {
-                    Label(message, systemImage: "exclamationmark.circle")
-                        .font(.subheadline)
-                        .foregroundStyle(.red)
-                        .lineLimit(nil)
-                }
+        VStack(alignment: .leading, spacing: PartyTheme.compactSpacing) {
+            switch statusBadgeStyle {
+            case .symbol:
+                compactRow
+            case .labeled:
+                labeledContent
             }
-            .accessibilityElement(children: .combine)
+
+            if showsApprovalText {
+                approvalLabel
+            }
+
+            if case let .failed(message) = task.status {
+                Label(message, systemImage: "exclamationmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .lineLimit(nil)
+            }
 
             if let onApprove {
                 ApprovalActionBar(
@@ -62,6 +52,86 @@ struct PartyTaskCard: View {
         }
     }
 
+    /// Left → right: category, copy, status. Top → down: position, title, category/approval.
+    private var compactRow: some View {
+        HStack(alignment: .top, spacing: PartyTheme.standardSpacing) {
+            categoryGlyph
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let positionLabel {
+                    Text(positionLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                taskTitle
+
+                HStack(spacing: PartyTheme.compactSpacing) {
+                    if !showsApprovalText {
+                        approvalSymbol
+                    }
+
+                    Text(categoryName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+
+            TaskStatusBadge(status: task.status, style: .symbol)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var labeledContent: some View {
+        HStack(alignment: .top, spacing: PartyTheme.standardSpacing) {
+            categoryGlyph
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: PartyTheme.compactSpacing) {
+                if let positionLabel {
+                    Text(positionLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: PartyTheme.compactSpacing) {
+                        taskTitle
+                            .fixedSize(horizontal: true, vertical: false)
+
+                        Spacer(minLength: PartyTheme.compactSpacing)
+
+                        TaskStatusBadge(status: task.status, style: .labeled)
+                    }
+
+                    VStack(alignment: .leading, spacing: PartyTheme.compactSpacing) {
+                        taskTitle
+                        TaskStatusBadge(status: task.status, style: .labeled)
+                    }
+                }
+
+                Text(categoryName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var categoryGlyph: some View {
+        Image(systemName: categoryIcon)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(PartyTheme.accent)
+            .frame(width: 36, height: 36)
+            .background(PartyTheme.accent.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .accessibilityLabel(categoryName)
+    }
+
     private var taskTitle: some View {
         Text(task.title)
             .font(.headline)
@@ -74,25 +144,57 @@ struct PartyTaskCard: View {
     }
 
     @ViewBuilder
+    private var approvalSymbol: some View {
+        switch task.approvalRequirement {
+        case .none:
+            Image(systemName: "info.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(PartyTheme.informationalTint)
+                .accessibilityLabel("Informational")
+        case .required:
+            Image(systemName: isApproved ? "checkmark.shield.fill" : "shield.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(
+                    isApproved ? PartyTheme.successTint : PartyTheme.accent
+                )
+                .accessibilityLabel(isApproved ? "Pre-approved" : "Need approval")
+                .accessibilityIdentifier(
+                    isApproved ? "approval-granted-label" : "approval-required-label"
+                )
+        }
+    }
+
+    @ViewBuilder
     private var approvalLabel: some View {
         switch task.approvalRequirement {
         case .none:
-            Label("Informational task", systemImage: "info.circle")
+            Label("Informational", systemImage: "info.circle.fill")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(PartyTheme.informationalTint)
         case .required:
             Label(
-                isApproved ? "Approval granted" : "Approval required",
-                systemImage: isApproved ? "checkmark.shield.fill" : "shield"
+                isApproved ? "Pre-approved" : "Need approval",
+                systemImage: isApproved ? "checkmark.shield.fill" : "shield.fill"
             )
             .font(.subheadline.weight(.medium))
-            .foregroundStyle(isApproved ? Color.green : PartyTheme.accent)
+            .foregroundStyle(
+                isApproved ? PartyTheme.successTint : PartyTheme.accent
+            )
+            .accessibilityIdentifier(
+                isApproved ? "approval-granted-label" : "approval-required-label"
+            )
         }
     }
 
     private var cardBackground: Color {
         if isHighlighted || task.status == .awaitingApproval {
             PartyTheme.approvalBackground
+        } else if case .failed = task.status {
+            Color.red.opacity(0.1)
+        } else if task.status == .completed {
+            PartyTheme.successTint.opacity(0.1)
+        } else if task.status == .declined {
+            Color.primary.opacity(0.05)
         } else {
             PartyTheme.cardBackground
         }
@@ -101,6 +203,10 @@ struct PartyTaskCard: View {
     private var borderColor: Color {
         if isHighlighted || task.status == .awaitingApproval {
             PartyTheme.accent.opacity(0.45)
+        } else if case .failed = task.status {
+            Color.red.opacity(0.35)
+        } else if task.status == .completed {
+            PartyTheme.successTint.opacity(0.35)
         } else {
             Color(uiColor: .separator).opacity(0.35)
         }

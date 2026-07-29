@@ -1,18 +1,32 @@
 import SwiftUI
 
 struct TaskStatusBadge: View {
+    enum Style {
+        /// Icon + text capsule used on Execution.
+        case labeled
+        /// Compact symbol for dense plan cards.
+        case symbol
+    }
+
     let status: PartyTaskStatus
+    var style: Style = .labeled
 
     var body: some View {
-        HStack(spacing: 6) {
-            if status == .running {
-                ProgressView()
-                    .controlSize(.mini)
-                    .tint(tint)
-            } else {
-                Image(systemName: iconName)
-                    .accessibilityHidden(true)
+        Group {
+            switch style {
+            case .labeled:
+                labeledBadge
+            case .symbol:
+                symbolBadge
             }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Status: \(label)")
+    }
+
+    private var labeledBadge: some View {
+        HStack(spacing: 6) {
+            statusSymbol
 
             Text(label)
                 .lineLimit(nil)
@@ -22,8 +36,26 @@ struct TaskStatusBadge: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(tint.opacity(0.12), in: Capsule())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Status: \(label)")
+    }
+
+    private var symbolBadge: some View {
+        statusSymbol
+            .font(.body.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: 28, height: 28)
+            .background(tint.opacity(0.12), in: Circle())
+    }
+
+    @ViewBuilder
+    private var statusSymbol: some View {
+        if status == .running {
+            ProgressView()
+                .controlSize(.mini)
+                .tint(tint)
+        } else {
+            Image(systemName: iconName)
+                .accessibilityHidden(true)
+        }
     }
 
     private var label: String {
@@ -50,7 +82,7 @@ struct TaskStatusBadge: View {
         case .pending:
             "clock"
         case .awaitingApproval:
-            "checkmark.shield.fill"
+            "shield.fill"
         case .running:
             "hourglass"
         case .completed:
@@ -66,12 +98,14 @@ struct TaskStatusBadge: View {
 
     private var tint: Color {
         switch status {
-        case .pending, .declined, .cancelled:
+        case .pending, .cancelled:
             .secondary
+        case .declined:
+            PartyTheme.secondaryText
         case .running, .awaitingApproval:
             PartyTheme.accent
         case .completed:
-            .green
+            PartyTheme.successTint
         case .failed:
             .red
         }

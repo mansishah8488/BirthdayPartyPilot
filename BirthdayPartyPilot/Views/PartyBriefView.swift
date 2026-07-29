@@ -15,9 +15,9 @@ struct PartyBriefView: View {
                 )
                 .listRowInsets(
                     EdgeInsets(
-                        top: PartyTheme.standardSpacing,
+                        top: PartyTheme.compactSpacing,
                         leading: PartyTheme.standardSpacing,
-                        bottom: PartyTheme.compactSpacing,
+                        bottom: PartyTheme.compactSpacing / 2,
                         trailing: PartyTheme.standardSpacing
                     )
                 )
@@ -59,9 +59,9 @@ struct PartyBriefView: View {
                 .clipShape(RoundedRectangle(cornerRadius: PartyTheme.cardCornerRadius))
                 .listRowInsets(
                     EdgeInsets(
-                        top: PartyTheme.compactSpacing,
+                        top: PartyTheme.compactSpacing / 2,
                         leading: PartyTheme.standardSpacing,
-                        bottom: PartyTheme.compactSpacing,
+                        bottom: PartyTheme.compactSpacing / 2,
                         trailing: PartyTheme.standardSpacing
                     )
                 )
@@ -100,6 +100,7 @@ struct PartyBriefView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(PartyTheme.sectionSpacing)
         .defaultScrollAnchor(.top)
         .scrollContentBackground(.hidden)
         .background(PartyTheme.pageBackground)

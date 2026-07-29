@@ -12,8 +12,8 @@ struct PartySectionHeader: View {
 
             if let subtitle {
                 Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(PartyTheme.secondaryText)
                     .lineLimit(nil)
             }
         }

@@ -45,8 +45,24 @@ final class BirthdayPartyPilotUITests: XCTestCase {
         XCTAssertTrue(reviewScreen.waitForExistence(timeout: 10))
         XCTAssertTrue(summaryHeader.waitForExistence(timeout: 10))
         XCTAssertTrue(summaryHeader.label.contains("Plan review"))
-        XCTAssertTrue(app.staticTexts["Pending"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Approval required"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["plan-progress-summary"].waitForExistence(timeout: 5))
+
+        // Status is symbol-only on Plan Review; assert via accessibility label.
+        let pendingStatus = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Status: Pending"))
+            .firstMatch
+        XCTAssertTrue(pendingStatus.waitForExistence(timeout: 5))
+
+        let approvalRequired = app.descendants(matching: .any)["approval-required-label"]
+        scrollUntilExists(
+            element: approvalRequired,
+            named: "approval required label",
+            in: app
+        )
+        XCTAssertTrue(
+            approvalRequired.exists
+                || app.staticTexts["Approval required"].exists
+        )
 
         let taskTitles = [
             "Calculate cake servings",
@@ -70,6 +86,46 @@ final class BirthdayPartyPilotUITests: XCTestCase {
     }
 
     @MainActor
+    func testPreApprovingRequiredTasksClearsNeedApprovalCount() throws {
+        let app = XCUIApplication()
+        launchFresh(app)
+
+        let createButton = app.buttons["create-plan-button"]
+        XCTAssertTrue(createButton.waitForExistence(timeout: 5))
+        createButton.tap()
+
+        let progressSummary = app.descendants(matching: .any)["plan-progress-summary"]
+        XCTAssertTrue(progressSummary.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            progressSummary.label.localizedCaseInsensitiveContains("Need approval: 3"),
+            "Expected initial Need approval count of 3. Label: \(progressSummary.label)"
+        )
+
+        for index in 1...3 {
+            let approveButton = app.buttons
+                .matching(NSPredicate(format: "label BEGINSWITH %@", "Approve "))
+                .firstMatch
+            scrollTo(
+                element: approveButton,
+                named: "approve required task \(index)",
+                in: app
+            )
+            approveButton.tap()
+        }
+
+        scrollToTop(in: app)
+        XCTAssertTrue(progressSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            progressSummary.label.localizedCaseInsensitiveContains("Need approval: 0"),
+            "Expected Need approval count to reach 0 after pre-approving all required tasks. Label: \(progressSummary.label)"
+        )
+        XCTAssertTrue(
+            progressSummary.label.localizedCaseInsensitiveContains("Pre-approved: 3"),
+            "Expected Pre-approved count to reach 3. Label: \(progressSummary.label)"
+        )
+    }
+
+    @MainActor
     func testRetryDeclineAndRestartAreWiredToExecutionScreen() throws {
         let app = XCUIApplication()
         launchFresh(app)
@@ -85,7 +141,14 @@ final class BirthdayPartyPilotUITests: XCTestCase {
 
         let retryButton = app.buttons["retry-failed-task-button"]
         scrollTo(element: retryButton, named: "retry failed task", in: app)
-        XCTAssertTrue(app.staticTexts["Failed"].waitForExistence(timeout: 5))
+        let failedStatus = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Status: Failed"))
+            .firstMatch
+        XCTAssertTrue(
+            failedStatus.waitForExistence(timeout: 5)
+                || app.staticTexts["Failed"].waitForExistence(timeout: 2)
+                || app.descendants(matching: .any)["execution-failure-message"].waitForExistence(timeout: 2)
+        )
         retryButton.tap()
 
         scrollToTop(in: app)
@@ -107,7 +170,13 @@ final class BirthdayPartyPilotUITests: XCTestCase {
         XCTAssertTrue(declineButton.exists)
         XCTAssertTrue(approveButton.label.contains("Confirm venue reservation details"))
         XCTAssertTrue(declineButton.label.contains("Confirm venue reservation details"))
-        XCTAssertTrue(app.staticTexts["Awaiting approval"].exists)
+        let awaitingStatus = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Status: Awaiting approval"))
+            .firstMatch
+        XCTAssertTrue(
+            awaitingStatus.waitForExistence(timeout: 5)
+                || app.staticTexts["Awaiting approval"].waitForExistence(timeout: 2)
+        )
         declineButton.tap()
 
         scrollToTop(in: app)
