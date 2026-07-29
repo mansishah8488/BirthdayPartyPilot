@@ -109,16 +109,168 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         XCTAssertEqual(agent.state, .completed)
     }
 
-    func testRestartClearsDemoState() async {
-        let agent = makeAgent(tool: RecordingPartyTool())
+    func testRestartAfterFailureClearsRunStateAndFreshPlanFailsFavorAgain() async {
+        let planner = RecordingBirthdayPlanner()
+        let tool = MockPartyTool()
+        let agent = makeAgent(planner: planner, tool: tool)
+        let originalContext = agent.context
         await agent.start()
+        let originalTaskIDs = agent.tasks.map(\.id)
         await agent.approve(taskID: agent.tasks[3].id)
+        await agent.approve(taskID: agent.tasks[4].id)
+        await agent.executePlan()
+
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+        XCTAssertTrue(agent.canRestart)
+        XCTAssertNotNil(agent.failureMessage)
 
         agent.restart()
 
         XCTAssertEqual(agent.state, .idle)
         XCTAssertTrue(agent.tasks.isEmpty)
         XCTAssertTrue(agent.executionLog.isEmpty)
+        XCTAssertNil(agent.currentTask)
+        XCTAssertNil(agent.pendingApprovalTask)
+        XCTAssertNil(agent.failureMessage)
+        XCTAssertTrue(agent.canStart)
+        XCTAssertFalse(agent.canRestart)
+        XCTAssertEqual(agent.context, originalContext)
+        XCTAssertTrue(originalTaskIDs.allSatisfy { !agent.isApproved(taskID: $0) })
+        XCTAssertEqual(planner.createPlanCallCount, 1)
+
+        await agent.start()
+
+        let newTaskIDs = agent.tasks.map(\.id)
+        XCTAssertEqual(planner.createPlanCallCount, 2)
+        XCTAssertEqual(newTaskIDs.count, 5)
+        XCTAssertTrue(Set(originalTaskIDs).isDisjoint(with: Set(newTaskIDs)))
+        XCTAssertEqual(agent.state, .reviewing)
+
+        await agent.executePlan()
+
+        XCTAssertEqual(
+            agent.tasks[2].status,
+            .failed("Preparing the party-favor shopping list failed on its first attempt.")
+        )
+        XCTAssertEqual(
+            Array(tool.executedTaskIDs.suffix(3)),
+            Array(newTaskIDs.prefix(3))
+        )
+    }
+
+    func testRestartAfterCompletionClearsRunStateAndPreservesContext() async {
+        let tool = RecordingPartyTool()
+        let agent = makeAgent(tool: tool)
+        let originalContext = agent.context
+        await agent.start()
+        let originalTaskIDs = agent.tasks.map(\.id)
+        await agent.approve(taskID: agent.tasks[3].id)
+        await agent.approve(taskID: agent.tasks[4].id)
+        await agent.executePlan()
+
+        XCTAssertEqual(agent.state, .completed)
+        XCTAssertTrue(agent.canRestart)
+
+        agent.restart()
+
+        XCTAssertEqual(agent.state, .idle)
+        XCTAssertTrue(agent.tasks.isEmpty)
+        XCTAssertTrue(agent.executionLog.isEmpty)
+        XCTAssertNil(agent.currentTask)
+        XCTAssertNil(agent.pendingApprovalTask)
+        XCTAssertNil(agent.failureMessage)
+        XCTAssertTrue(agent.canStart)
+        XCTAssertFalse(agent.canRestart)
+        XCTAssertEqual(agent.context, originalContext)
+        XCTAssertTrue(originalTaskIDs.allSatisfy { !agent.isApproved(taskID: $0) })
+    }
+
+    func testRestartOutsideTerminalStatesDoesNothing() async {
+        let idleAgent = makeAgent(tool: RecordingPartyTool())
+        idleAgent.restart()
+        XCTAssertEqual(idleAgent.state, .idle)
+        XCTAssertTrue(idleAgent.tasks.isEmpty)
+
+        let reviewingAgent = makeAgent(tool: RecordingPartyTool())
+        await reviewingAgent.start()
+        await reviewingAgent.approve(taskID: reviewingAgent.tasks[3].id)
+        let reviewingTasks = reviewingAgent.tasks
+        let reviewingLog = reviewingAgent.executionLog
+
+        reviewingAgent.restart()
+
+        XCTAssertEqual(reviewingAgent.state, .reviewing)
+        XCTAssertEqual(reviewingAgent.tasks, reviewingTasks)
+        XCTAssertEqual(reviewingAgent.executionLog, reviewingLog)
+        XCTAssertTrue(reviewingAgent.isApproved(taskID: reviewingAgent.tasks[3].id))
+
+        let awaitingAgent = makeAgent(tool: RecordingPartyTool())
+        await awaitingAgent.start()
+        await awaitingAgent.executePlan()
+        let awaitingState = awaitingAgent.state
+        let awaitingTasks = awaitingAgent.tasks
+        let awaitingLog = awaitingAgent.executionLog
+
+        awaitingAgent.restart()
+
+        XCTAssertEqual(awaitingAgent.state, awaitingState)
+        XCTAssertEqual(awaitingAgent.tasks, awaitingTasks)
+        XCTAssertEqual(awaitingAgent.executionLog, awaitingLog)
+        XCTAssertNotNil(awaitingAgent.pendingApprovalTask)
+    }
+
+    func testRestartWhilePlanningDoesNothing() async throws {
+        let plannedTasks = try await DeterministicBirthdayPlanner().createPlan(
+            for: testContext
+        )
+        let planner = SuspendingBirthdayPlanner()
+        let agent = makeAgent(planner: planner, tool: RecordingPartyTool())
+        let planningStarted = expectation(description: "Planning started")
+        planner.onCreatePlan = {
+            planningStarted.fulfill()
+        }
+        let startTask = Task {
+            await agent.start()
+        }
+        await fulfillment(of: [planningStarted], timeout: 2)
+
+        agent.restart()
+
+        XCTAssertEqual(agent.state, .planning)
+        XCTAssertTrue(agent.tasks.isEmpty)
+        XCTAssertFalse(agent.canRestart)
+
+        planner.complete(with: plannedTasks)
+        await startTask.value
+        XCTAssertEqual(agent.state, .reviewing)
+    }
+
+    func testRestartWhileExecutingDoesNothing() async {
+        let tool = SuspendingFirstPartyTool()
+        let agent = makeAgent(tool: tool)
+        await agent.start()
+        let executionStarted = expectation(description: "Execution started")
+        tool.onFirstExecution = {
+            executionStarted.fulfill()
+        }
+        let executionTask = Task {
+            await agent.executePlan()
+        }
+        await fulfillment(of: [executionStarted], timeout: 2)
+        let executingState = agent.state
+        let executingTasks = agent.tasks
+        let executingLog = agent.executionLog
+
+        agent.restart()
+
+        XCTAssertEqual(agent.state, executingState)
+        XCTAssertEqual(agent.tasks, executingTasks)
+        XCTAssertEqual(agent.executionLog, executingLog)
+        XCTAssertFalse(agent.canRestart)
+
+        tool.completeFirstExecution()
+        await executionTask.value
+        XCTAssertEqual(agent.state, .awaitingApproval(agent.tasks[3].id))
     }
 
     func testMockPartyToolFailsFavorTaskOnlyOnFirstAttemptForSameID() async throws {
@@ -353,17 +505,21 @@ final class BirthdayAgentExecutionTests: XCTestCase {
         tool: any PartyTool
     ) -> BirthdayAgent {
         BirthdayAgent(
-            context: PartyContext(
-                childName: "Viyana",
-                age: 7,
-                partyDate: Date(timeIntervalSince1970: 0),
-                theme: "Rainbows",
-                adultCount: 8,
-                childCount: 12,
-                venue: "Test Venue"
-            ),
+            context: testContext,
             planner: planner,
             tool: tool
+        )
+    }
+
+    private var testContext: PartyContext {
+        PartyContext(
+            childName: "Viyana",
+            age: 7,
+            partyDate: Date(timeIntervalSince1970: 0),
+            theme: "Rainbows",
+            adultCount: 8,
+            childCount: 12,
+            venue: "Test Venue"
         )
     }
 }
@@ -375,6 +531,24 @@ private final class RecordingBirthdayPlanner: BirthdayPlanning {
     func createPlan(for context: PartyContext) async throws -> [PartyTask] {
         createPlanCallCount += 1
         return try await DeterministicBirthdayPlanner().createPlan(for: context)
+    }
+}
+
+@MainActor
+private final class SuspendingBirthdayPlanner: BirthdayPlanning {
+    var onCreatePlan: (() -> Void)?
+    private var continuation: CheckedContinuation<[PartyTask], Error>?
+
+    func createPlan(for context: PartyContext) async throws -> [PartyTask] {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            onCreatePlan?()
+        }
+    }
+
+    func complete(with tasks: [PartyTask]) {
+        continuation?.resume(returning: tasks)
+        continuation = nil
     }
 }
 
@@ -393,6 +567,34 @@ private enum PlanningFailure: LocalizedError {
 
     var errorDescription: String? {
         "Planning failed."
+    }
+}
+
+@MainActor
+private final class SuspendingFirstPartyTool: PartyTool {
+    let name = "Suspending Party Tool"
+    var onFirstExecution: (() -> Void)?
+    private(set) var executedTaskIDs: [UUID] = []
+    private var shouldSuspend = true
+    private var continuation: CheckedContinuation<String, Error>?
+
+    func execute(task: PartyTask) async throws -> String {
+        executedTaskIDs.append(task.id)
+
+        guard shouldSuspend else {
+            return "Recorded \(task.title)"
+        }
+
+        shouldSuspend = false
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            onFirstExecution?()
+        }
+    }
+
+    func completeFirstExecution() {
+        continuation?.resume(returning: "Recorded first task")
+        continuation = nil
     }
 }
 

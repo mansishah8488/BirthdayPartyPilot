@@ -123,6 +123,10 @@ final class BirthdayAgent: ObservableObject {
         approvedTaskIDs.contains(taskID)
     }
 
+    var canStart: Bool {
+        state == .idle
+    }
+
     var canExecutePlan: Bool {
         guard state == .reviewing else {
             return false
@@ -147,6 +151,16 @@ final class BirthdayAgent: ObservableObject {
         }
     }
 
+    var pendingApprovalTask: PartyTask? {
+        guard case let .awaitingApproval(taskID) = state else {
+            return nil
+        }
+
+        return tasks.first {
+            $0.id == taskID && $0.status == .awaitingApproval
+        }
+    }
+
     var completedTasks: [PartyTask] {
         tasks.filter { $0.status == .completed }
     }
@@ -160,10 +174,10 @@ final class BirthdayAgent: ObservableObject {
 
     var canRestart: Bool {
         switch state {
-        case .planning, .executing:
-            false
-        case .idle, .reviewing, .awaitingApproval, .completed, .failed:
+        case .completed, .failed:
             true
+        case .idle, .planning, .reviewing, .awaitingApproval, .executing:
+            false
         }
     }
 
