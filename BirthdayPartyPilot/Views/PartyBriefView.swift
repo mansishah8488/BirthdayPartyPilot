@@ -7,7 +7,24 @@ struct PartyBriefView: View {
 
     var body: some View {
         List {
-            Section("Party brief") {
+            Section {
+                PartySummaryHeader(
+                    context: context,
+                    phase: "Party brief",
+                    detail: "\(context.adultCount + context.childCount) guests at \(context.venue)"
+                )
+                .listRowInsets(
+                    EdgeInsets(
+                        top: PartyTheme.compactSpacing,
+                        leading: PartyTheme.standardSpacing,
+                        bottom: PartyTheme.compactSpacing,
+                        trailing: PartyTheme.standardSpacing
+                    )
+                )
+                .listRowBackground(Color.clear)
+            }
+
+            Section {
                 LabeledContent("Birthday child", value: context.childName)
                     .accessibilityIdentifier("party-child-name")
                 LabeledContent("Age", value: "Turning \(context.age)")
@@ -23,16 +40,26 @@ struct PartyBriefView: View {
                 LabeledContent("Adults", value: "\(context.adultCount) adults")
                 LabeledContent("Children", value: "\(context.childCount) children")
                 LabeledContent("Venue", value: context.venue)
+            } header: {
+                PartySectionHeader(
+                    title: "Party details",
+                    subtitle: "The fixed brief used to create the plan."
+                )
             }
 
             Section {
                 Button(action: onCreatePlan) {
-                    Text("Create Birthday Plan")
+                    Label(
+                        isPlanning ? "Creating Birthday Plan" : "Create Birthday Plan",
+                        systemImage: isPlanning ? "sparkles" : "wand.and.stars"
+                    )
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .disabled(isPlanning)
                 .accessibilityLabel("Create Birthday Plan")
+                .accessibilityHint("Creates a six-task birthday plan for review.")
                 .accessibilityIdentifier("create-plan-button")
 
                 if isPlanning {
@@ -42,6 +69,10 @@ struct PartyBriefView: View {
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .defaultScrollAnchor(.top)
+        .scrollContentBackground(.hidden)
+        .background(PartyTheme.pageBackground)
         .accessibilityIdentifier("party-brief-screen")
     }
 }

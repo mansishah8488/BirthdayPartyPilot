@@ -11,79 +11,84 @@ struct ContentView: View {
     @ObservedObject var agent: BirthdayAgent
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Birthday Party Pilot")
-                .font(.title2.bold())
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+        NavigationStack {
+            Group {
+                switch agent.state {
+                case .idle, .planning:
+                    PartyBriefView(
+                        context: agent.context,
+                        isPlanning: agent.state == .planning,
+                        onCreatePlan: {
+                            Task {
+                                await agent.start()
+                            }
+                        }
+                    )
+                    .id("party-brief")
+                case .reviewing:
+                    PlanReviewView(
+                        context: agent.context,
+                        tasks: agent.tasks,
+                        isApproved: { agent.isApproved(taskID: $0) },
+                        canExecutePlan: agent.canExecutePlan,
+                        onApprove: { taskID in
+                            Task {
+                                await agent.approve(taskID: taskID)
+                            }
+                        },
+                        onExecutePlan: {
+                            Task {
+                                await agent.executePlan()
+                            }
+                        }
+                    )
+                    .id("plan-review")
+                case .awaitingApproval, .executing, .completed, .failed:
+                    ExecutionView(
+                        context: agent.context,
+                        tasks: agent.tasks,
+                        currentTask: agent.currentTask,
+                        executionLog: agent.executionLog,
+                        failureMessage: agent.failureMessage,
+                        isComplete: agent.state == .completed,
+                        canRetry: agent.failureMessage != nil && agent.currentTask != nil,
+                        canApprove: canRespondToCurrentApproval,
+                        canDecline: canRespondToCurrentApproval,
+                        canRestart: agent.canRestart,
+                        onRetry: {
+                            Task {
+                                await agent.retryFailedTask()
+                            }
+                        },
+                        onApprove: {
+                            guard let taskID = agent.currentTask?.id else {
+                                return
+                            }
 
-            switch agent.state {
-            case .idle, .planning:
-                PartyBriefView(
-                    context: agent.context,
-                    isPlanning: agent.state == .planning,
-                    onCreatePlan: {
-                        Task {
-                            await agent.start()
-                        }
-                    }
-                )
-            case .reviewing:
-                PlanReviewView(
-                    tasks: agent.tasks,
-                    isApproved: { agent.isApproved(taskID: $0) },
-                    canExecutePlan: agent.canExecutePlan,
-                    onApprove: { taskID in
-                        Task {
-                            await agent.approve(taskID: taskID)
-                        }
-                    },
-                    onExecutePlan: {
-                        Task {
-                            await agent.executePlan()
-                        }
-                    }
-                )
-            case .awaitingApproval, .executing, .completed, .failed:
-                ExecutionView(
-                    currentTask: agent.currentTask,
-                    completedTasks: agent.completedTasks,
-                    executionLog: agent.executionLog,
-                    failureMessage: agent.failureMessage,
-                    isComplete: agent.state == .completed,
-                    canRetry: agent.failureMessage != nil && agent.currentTask != nil,
-                    canApprove: canRespondToCurrentApproval,
-                    canDecline: canRespondToCurrentApproval,
-                    canRestart: agent.canRestart,
-                    onRetry: {
-                        Task {
-                            await agent.retryFailedTask()
-                        }
-                    },
-                    onApprove: {
-                        guard let taskID = agent.currentTask?.id else {
-                            return
-                        }
+                            Task {
+                                await agent.approve(taskID: taskID)
+                            }
+                        },
+                        onDecline: {
+                            guard let taskID = agent.currentTask?.id else {
+                                return
+                            }
 
-                        Task {
-                            await agent.approve(taskID: taskID)
+                            Task {
+                                await agent.decline(taskID: taskID)
+                            }
+                        },
+                        onRestart: {
+                            agent.restart()
                         }
-                    },
-                    onDecline: {
-                        guard let taskID = agent.currentTask?.id else {
-                            return
-                        }
-
-                        Task {
-                            await agent.decline(taskID: taskID)
-                        }
-                    },
-                    onRestart: {
-                        agent.restart()
-                    }
-                )
+                    )
+                    .id("execution")
+                }
             }
+            .navigationTitle("Birthday Party Pilot")
+            .navigationBarTitleDisplayMode(.inline)
         }
+        .tint(PartyTheme.accent)
     }
 
     private var canRespondToCurrentApproval: Bool {

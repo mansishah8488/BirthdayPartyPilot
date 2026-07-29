@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 
 struct PlanReviewView: View {
+    let context: PartyContext
     let tasks: [PartyTask]
     let isApproved: (UUID) -> Bool
     let canExecutePlan: Bool
@@ -9,91 +10,95 @@ struct PlanReviewView: View {
     let onExecutePlan: () -> Void
 
     var body: some View {
-        List {
-            Section("Plan review") {
-                ForEach(tasks) { task in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label(task.title, systemImage: statusIcon(for: task.status))
-                            .font(.headline)
-
-                        LabeledContent("Category", value: categoryName(for: task.category))
-                        LabeledContent(
-                            "Approval",
-                            value: approvalDescription(for: task)
+        ScrollViewReader { proxy in
+            List {
+                Section {
+                    PartySummaryHeader(
+                        context: context,
+                        phase: "Plan review",
+                        detail: "\(tasks.count) tasks · \(approvalTaskCount) require approval"
+                    )
+                    .id("plan-review-top")
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: PartyTheme.compactSpacing,
+                            leading: PartyTheme.standardSpacing,
+                            bottom: PartyTheme.compactSpacing,
+                            trailing: PartyTheme.standardSpacing
                         )
-                        LabeledContent("Status", value: statusName(for: task.status))
-
-                        if task.approvalRequirement == .required,
-                           !isApproved(task.id) {
-                            Button("Approve") {
-                                onApprove(task.id)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityLabel("Approve \(task.title)")
-                            .accessibilityIdentifier("approve-\(task.id.uuidString)")
-                        }
-                    }
-                    .padding(.vertical, 4)
+                    )
+                    .listRowBackground(Color.clear)
                 }
-            }
 
-            Section {
-                Button("Start Plan Execution", action: onExecutePlan)
+                Section {
+                    ForEach(tasks) { task in
+                        PartyTaskCard(
+                            task: task,
+                            isApproved: isApproved(task.id),
+                            isHighlighted: task.approvalRequirement == .required,
+                            onApprove: approvalAction(for: task)
+                        )
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: PartyTheme.compactSpacing / 2,
+                                leading: PartyTheme.standardSpacing,
+                                bottom: PartyTheme.compactSpacing / 2,
+                                trailing: PartyTheme.standardSpacing
+                            )
+                        )
+                        .listRowBackground(Color.clear)
+                    }
+                } header: {
+                    PartySectionHeader(
+                        title: "Six-task plan",
+                        subtitle: "Approval-required tasks use the lavender treatment."
+                    )
+                }
+
+                Section {
+                    Button(action: onExecutePlan) {
+                        Label("Start Plan Execution", systemImage: "play.fill")
+                            .frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(!canExecutePlan)
                     .accessibilityLabel("Start Plan Execution")
+                    .accessibilityHint(
+                        "Runs informational tasks and pauses before tasks that need approval."
+                    )
                     .accessibilityIdentifier("execute-plan-button")
 
-                Text("Approval-required tasks pause for a decision during execution.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text("Approval-required tasks pause for a decision during execution.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .defaultScrollAnchor(.top)
+            .scrollContentBackground(.hidden)
+            .background(PartyTheme.pageBackground)
+            .accessibilityIdentifier("plan-review-screen")
+            .task {
+                await Task.yield()
+                proxy.scrollTo("plan-review-top", anchor: .top)
             }
         }
-        .accessibilityIdentifier("plan-review-screen")
     }
 
-    private func categoryName(for category: PartyTaskCategory) -> String {
-        switch category {
-        case .guests: "Guests"
-        case .cake: "Cake"
-        case .food: "Food"
-        case .favors: "Favors"
-        case .gifts: "Gifts"
-        case .venue: "Venue"
-        case .schedule: "Schedule"
+    private var approvalTaskCount: Int {
+        tasks.filter { $0.approvalRequirement == .required }.count
+    }
+
+    private func approvalAction(for task: PartyTask) -> (() -> Void)? {
+        guard task.approvalRequirement == .required,
+              !isApproved(task.id)
+        else {
+            return nil
         }
-    }
 
-    private func approvalDescription(for task: PartyTask) -> String {
-        switch task.approvalRequirement {
-        case .none:
-            "Not required"
-        case .required:
-            isApproved(task.id) ? "Required · Approved" : "Required · Awaiting approval"
-        }
-    }
-
-    private func statusName(for status: PartyTaskStatus) -> String {
-        switch status {
-        case .pending: "Pending"
-        case .awaitingApproval: "Awaiting approval"
-        case .running: "Running"
-        case .completed: "Completed"
-        case let .failed(message): "Failed: \(message)"
-        case .declined: "Declined"
-        case .cancelled: "Cancelled"
-        }
-    }
-
-    private func statusIcon(for status: PartyTaskStatus) -> String {
-        switch status {
-        case .pending: "circle"
-        case .awaitingApproval: "hand.raised.fill"
-        case .running: "hourglass"
-        case .completed: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        case .declined: "hand.thumbsdown.fill"
-        case .cancelled: "xmark.circle.fill"
+        return {
+            onApprove(task.id)
         }
     }
 }

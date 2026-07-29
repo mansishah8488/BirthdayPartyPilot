@@ -33,13 +33,20 @@ final class BirthdayPartyPilotUITests: XCTestCase {
         XCTAssertTrue(
             childName.label.contains("Viyana") || childValue?.contains("Viyana") == true
         )
+        let summaryHeader = app.descendants(matching: .any)["party-summary-header"]
+        XCTAssertTrue(summaryHeader.waitForExistence(timeout: 5))
+        XCTAssertTrue(summaryHeader.label.contains("Viyana"))
 
         let createButton = app.buttons["create-plan-button"]
         XCTAssertTrue(createButton.waitForExistence(timeout: 5))
         createButton.tap()
 
         let reviewScreen = app.descendants(matching: .any)["plan-review-screen"]
-        XCTAssertTrue(reviewScreen.waitForExistence(timeout: 5))
+        XCTAssertTrue(reviewScreen.waitForExistence(timeout: 10))
+        XCTAssertTrue(summaryHeader.waitForExistence(timeout: 10))
+        XCTAssertTrue(summaryHeader.label.contains("Plan review"))
+        XCTAssertTrue(app.staticTexts["Pending"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Approval required"].waitForExistence(timeout: 5))
 
         let taskTitles = [
             "Calculate cake servings",
@@ -78,6 +85,7 @@ final class BirthdayPartyPilotUITests: XCTestCase {
 
         let retryButton = app.buttons["retry-failed-task-button"]
         scrollTo(element: retryButton, named: "retry failed task", in: app)
+        XCTAssertTrue(app.staticTexts["Failed"].waitForExistence(timeout: 5))
         retryButton.tap()
 
         scrollToTop(in: app)
@@ -97,6 +105,9 @@ final class BirthdayPartyPilotUITests: XCTestCase {
         scrollTo(element: declineButton, named: "decline venue confirmation", in: app)
         XCTAssertTrue(approveButton.exists)
         XCTAssertTrue(declineButton.exists)
+        XCTAssertTrue(approveButton.label.contains("Confirm venue reservation details"))
+        XCTAssertTrue(declineButton.label.contains("Confirm venue reservation details"))
+        XCTAssertTrue(app.staticTexts["Awaiting approval"].exists)
         declineButton.tap()
 
         scrollToTop(in: app)
@@ -120,7 +131,11 @@ final class BirthdayPartyPilotUITests: XCTestCase {
         declineButton.tap()
 
         let completionMessage = app.descendants(matching: .any)["completion-message"]
-        XCTAssertTrue(completionMessage.waitForExistence(timeout: 5))
+        scrollUntilExists(
+            element: completionMessage,
+            named: "completion message",
+            in: app
+        )
 
         let restartButton = app.buttons["restart-demo-button"]
         scrollTo(element: restartButton, named: "restart completed demo", in: app)
@@ -162,6 +177,23 @@ final class BirthdayPartyPilotUITests: XCTestCase {
         for _ in 0..<maxSwipes {
             app.swipeDown()
         }
+    }
+
+    @MainActor
+    private func scrollUntilExists(
+        element: XCUIElement,
+        named name: String,
+        in app: XCUIApplication,
+        maxSwipes: Int = 8
+    ) {
+        for _ in 0..<maxSwipes {
+            if element.exists {
+                return
+            }
+            app.swipeUp()
+        }
+
+        XCTAssertTrue(element.waitForExistence(timeout: 2), "Expected \(name) to exist")
     }
 
     @MainActor
